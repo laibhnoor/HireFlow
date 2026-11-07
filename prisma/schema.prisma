@@ -1,0 +1,267 @@
+// HireFlow data model.
+//
+// Design note: an Analysis is a point-in-time snapshot. Scores are computed in
+// application code from per-requirement verdicts (see src/lib/scoring.ts), never
+// written directly by the LLM, so every number can be traced back to evidence.
+//
+// pgvector: CvChunk.embedding is an Unsupported() column because Prisma has no
+// native vector type. It is populated and queried with raw SQL; keep the
+// dimension (1536) in sync with OPENAI_EMBEDDING_MODEL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ParseStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum ApplicationStatus {
+  SAVED
+  APPLIED
+  SCREENING
+  INTERVIEW
+  OFFER
+  REJECTED
+  WITHDRAWN
+}
+
+enum RequirementType {
+  SKILL
+  EXPERIENCE
+  EDUCATION
+  PROJECT
+  CERTIFICATION
+  OTHER
+}
+
+enum Importance {
+  MUST_HAVE
+  NICE_TO_HAVE
+}
+
+enum MatchVerdict {
+  MATCHED
+  PARTIAL
+  MISSING
+}
+
+enum GeneratedDocType {
+  COVER_LETTER
+  CV_SUGGESTIONS
+  ROADMAP
+}
+
+enum QuestionCategory {
+  BEHAVIORAL
+  TECHNICAL
+  SYSTEM_DESIGN
+  ROLE_SPECIFIC
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  headline     String?
+  location     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  cvs          Cv[]
+  jobs         Job[]
+  applications Application[]
+  usageLogs    UsageLog[]
+}
+
+model Cv {
+  id          String      @id @default(cuid())
+  userId      String
+  title       String
+  fileName    String
+  mimeType    String
+  fileSize    Int
+  fileBytes   Bytes
+  textContent String      @db.Text
+  parsedJson  Json?
+  parseStatus ParseStatus @default(PENDING)
+  parseError  String?
+  isPrimary   Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunks       CvChunk[]
+  analyses     Analysis[]
+  applications Application[]
+
+  @@index([userId, isPrimary])
+}
+
+model CvChunk {
+  id         String  @id @default(cuid())
+  cvId       String
+  ordinal    Int
+  section    String
+  content    String  @db.Text
+  tokenCount Int
+  // 1536 = text-embedding-3-small. Raw SQL only.
+  embedding  Unsupported("vector(1536)")?
+
+  cv Cv @relation(fields: [cvId], references: [id], onDelete: Cascade)
+
+  @@unique([cvId, ordinal])
+  @@index([cvId])
+}
+
+model Job {
+  id             String   @id @default(cuid())
+  userId         String
+  company        String
+  title          String
+  location       String?
+  employmentType String?
+  url            String?
+  description    String   @db.Text
+  // Normalized requirements extracted from the description.
+  requirements   Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applications Application[]
+
+  @@index([userId])
+}
+
+model Application {
+  id       String            @id @default(cuid())
+  userId   String
+  cvId     String
+  jobId    String
+  status   ApplicationStatus @default(SAVED)
+  source   String?
+  notes    String?           @db.Text
+  appliedAt DateTime?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cv        Cv                 @relation(fields: [cvId], references: [id], onDelete: Restrict)
+  job       Job                @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  analysis  Analysis?
+  documents GeneratedDoc[]
+  questions InterviewQuestion[]
+  events    ApplicationEvent[]
+
+  @@index([userId, status])
+  @@index([jobId])
+}
+
+model Analysis {
+  id              String   @id @default(cuid())
+  applicationId   String   @unique
+  cvId            String
+  overallScore    Int
+  // [{ key, label, weight, score, detail }]
+  dimensionScores Json
+  matchedSkills   String[]
+  missingSkills   String[]
+  summary         String   @db.Text
+  rubricVersion   String
+  promptVersion   String
+  model           String
+  inputTokens     Int      @default(0)
+  outputTokens    Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  application Application        @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  cv          Cv                 @relation(fields: [cvId], references: [id], onDelete: Cascade)
+  matches     RequirementMatch[]
+
+  @@index([cvId])
+}
+
+model RequirementMatch {
+  id              String         @id @default(cuid())
+  analysisId      String
+  ordinal         Int
+  requirementText String         @db.Text
+  requirementType RequirementType
+  importance      Importance
+  verdict         MatchVerdict
+  weight          Int
+  rationale       String?        @db.Text
+  // [{ chunkId, section, snippet, similarity }]
+  evidence        Json
+
+  analysis Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@index([analysisId])
+}
+
+model GeneratedDoc {
+  id            String          @id @default(cuid())
+  applicationId String
+  type          GeneratedDocType
+  title         String
+  content       String          @db.Text
+  model         String
+  version       Int             @default(1)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, type, version])
+}
+
+model InterviewQuestion {
+  id            String           @id @default(cuid())
+  applicationId String
+  category      QuestionCategory
+  question      String           @db.Text
+  starHint      String?          @db.Text
+  answer        String?          @db.Text
+  ordinal       Int
+  createdAt     DateTime         @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+}
+
+model ApplicationEvent {
+  id            String   @id @default(cuid())
+  applicationId String
+  type          String
+  note          String?  @db.Text
+  createdAt     DateTime @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
+}
+
+model UsageLog {
+  id         String   @id @default(cuid())
+  userId     String
+  kind       String
+  model      String
+  inputTokens  Int    @default(0)
+  outputTokens Int    @default(0)
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
