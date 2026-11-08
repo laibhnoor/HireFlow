@@ -44,6 +44,11 @@ export async function deleteCvAction(formData: FormData) {
   });
   if (!cv) return;
 
+  const usedBy = await prisma.application.count({ where: { cvId: cv.id } });
+  if (usedBy > 0) {
+    redirect(`/cv?error=cv-in-use&count=${usedBy}`);
+  }
+
   await prisma.cv.delete({ where: { id: cv.id } });
 
   if (cv.isPrimary) {

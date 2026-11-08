@@ -21,7 +21,7 @@ export function DeleteCvButton({
       className={cn("inline-flex", className)}
       onSubmit={(event) => {
         const confirmed = window.confirm(
-          "Delete this CV? Its extracted text, search index and any analyses built from it will be removed.",
+          "Delete this CV? Its extracted text and search index will be removed. CVs used by an application can't be deleted yet.",
         );
         if (!confirmed) event.preventDefault();
       }}

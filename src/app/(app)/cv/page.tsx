@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
-import { Download, FileText, Star } from "lucide-react";
+import { AlertCircle, Download, FileText, Star } from "lucide-react";
 
 import { setPrimaryCvAction } from "@/app/(app)/cv/actions";
 import { EmptyState } from "@/components/app/empty-state";
@@ -34,8 +34,18 @@ type CvRow = {
   _count: { chunks: number };
 };
 
-export default async function CvPage() {
+export default async function CvPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await requireUser();
+  const params = await searchParams;
+  const deleteError = params.error === "cv-in-use" ? params : null;
+  const usedCount =
+    deleteError && typeof params.count === "string"
+      ? Number(params.count)
+      : null;
 
   const cvs = await prisma.cv.findMany({
     where: { userId: user.id },
@@ -65,6 +75,29 @@ export default async function CvPage() {
           </Badge>
         }
       />
+
+      {deleteError ? (
+        <div
+          role="alert"
+          className="mb-5 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive"
+        >
+          <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>
+            This CV can&apos;t be deleted because{" "}
+            {usedCount && Number.isFinite(usedCount)
+              ? `${usedCount} application${usedCount === 1 ? "" : "s"}`
+              : "an application"}{" "}
+            still use{usedCount === 1 ? "s" : ""} it.{" "}
+            <Link
+              href="/applications"
+              className="font-medium underline underline-offset-4"
+            >
+              View applications
+            </Link>
+            .
+          </span>
+        </div>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px] lg:items-start">
         <div className="order-2 space-y-4 lg:order-1">
