@@ -6,13 +6,16 @@ in your CV that proves it. Then generate the materials that close the gap.
 
 ## Status
 
-Phase 1 (foundation) is complete:
+Phase 1 (foundation) and phase 2 (CV ingestion) are complete:
 
 - Next.js 16 App Router, TypeScript, Tailwind v4, hand-rolled shadcn-style UI
 - Credentials auth (email + password, bcrypt, Auth.js JWT sessions)
 - Postgres 16 + pgvector via Docker, full Prisma data model, initial migration
 - Marketing page, auth pages, protected workspace shell, dashboard, settings
-- CV library and applications pages with empty states (wired up in phase 2)
+- CV upload (PDF/DOCX/TXT/MD, 10 MB), text extraction, section parsing,
+  section-aware chunking, embeddings with deterministic offline fallback
+- CV library and detail views: parsed sections, indexed passages, download,
+  set-primary and delete flows
 
 ## Quick start
 
@@ -64,14 +67,18 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 src/
   app/
     (auth)/            login, signup, server actions
-    (app)/             authenticated workspace shell
+    (app)/             authenticated workspace shell (dashboard, cv, settings)
     api/auth/          Auth.js route handler
+    api/cv/            authenticated CV upload and download routes
   components/
     app/               shell, nav, page chrome
     auth/              forms
+    cv/                uploader, status badge, delete controls
     ui/                primitives
   lib/
+    ai/embeddings.ts   OpenAI embeddings + deterministic mock fallback
     auth-guards.ts     server-side session guard
+    cv/                validation, extraction, section parsing, chunking, ingest
     db.ts              Prisma singleton
     env.ts             validated environment
 prisma/
@@ -97,11 +104,11 @@ evidence chunk references, so a score can always be explained and reproduced.
 Generation prompts reuse the same evidence set, which keeps the cover letter,
 CV suggestions, roadmap and interview prep consistent with the analysis.
 
-### RAG pipeline (phase 2–3)
+### RAG pipeline (phase 2 done, phase 3 next)
 
-1. Parse CV (PDF/DOCX/text) into section-aware chunks.
+1. Parse CV (PDF/DOCX/text) into section-aware chunks. ✅
 2. Embed chunks with `text-embedding-3-small`, store in `CvChunk.embedding`
-   (`vector(1536)`).
+   (`vector(1536)`). ✅ (deterministic hashing embeddings when no API key)
 3. Extract job requirements into must-have / nice-to-have.
 4. Retrieve top-k chunks per requirement with cosine similarity.
 5. Classify each requirement against retrieved evidence only, returning chunk
@@ -133,7 +140,7 @@ npm run test         # vitest (watch)
 ## Roadmap
 
 1. **Foundation** — scaffold, schema, auth, design system ✅
-2. CV upload, parsing, chunking, embeddings
+2. **CV ingestion** — upload, parsing, chunking, embeddings, library UI ✅
 3. Requirement extraction, RAG retrieval, evidence-backed scoring UI
 4. Streamed cover letters and CV improvement suggestions
 5. Skill-gap roadmap and interview preparation

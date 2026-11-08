@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "12mb",
     },
   },
-  serverExternalPackages: ["bcryptjs"],
+  serverExternalPackages: ["bcryptjs", "unpdf", "mammoth"],
   turbopack: {
     root: process.cwd(),
   },
