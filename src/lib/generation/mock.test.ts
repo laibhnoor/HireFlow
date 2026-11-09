@@ -65,6 +65,21 @@ const context: MaterialContext = {
       rationale: "No CV passage supports this requirement.",
       evidence: [],
     },
+    {
+      ordinal: 3,
+      text: "Experience with performance profiling",
+      type: "SKILL",
+      importance: "NICE_TO_HAVE",
+      verdict: "PARTIAL",
+      weight: 1,
+      rationale: "Some profiling evidence in your projects section.",
+      evidence: [
+        {
+          section: "Projects",
+          snippet: "Improved dashboard load time by profiling renders.",
+        },
+      ],
+    },
   ],
 };
 
@@ -73,6 +88,8 @@ const baseOptions: MaterialOptions = {
   tone: "professional",
   length: "standard",
   emphasis: "experience",
+  horizon: "4_weeks",
+  interviewFocus: "balanced",
   note: "",
 };
 
@@ -105,5 +122,52 @@ describe("generateMockMaterial", () => {
     expect(suggestions).toContain("No draft bullet — earn this first.");
     expect(suggestions).toContain("Draft bullet (verify before using)");
     expect(suggestions).toContain("## Strengths to keep");
+  });
+
+  it("turns missing requirements into roadmap steps, not claims", () => {
+    const roadmap = generateMockMaterial(context, {
+      ...baseOptions,
+      type: "ROADMAP",
+    });
+
+    expect(roadmap).toContain("# Skill-gap roadmap");
+    expect(roadmap).toContain("## Goal");
+    expect(roadmap).toContain("Phase 1 — Build the missing must-haves");
+    expect(roadmap).toContain("**Evidence to produce:**");
+    expect(roadmap).toContain("**Done when:**");
+    expect(roadmap).toContain("Excellent communication and stakeholder management");
+    expect(roadmap).toContain("run a short written update");
+    expect(roadmap).toContain("## Keep doing");
+  });
+
+  it("includes the longer horizon phase only for a 12-week plan", () => {
+    const shortPlan = generateMockMaterial(context, {
+      ...baseOptions,
+      type: "ROADMAP",
+    });
+    const longPlan = generateMockMaterial(context, {
+      ...baseOptions,
+      type: "ROADMAP",
+      horizon: "12_weeks",
+    });
+
+    expect(shortPlan).not.toContain("Phase 3");
+    expect(longPlan).toContain("Phase 3");
+  });
+
+  it("builds interview questions from evidence and an honest gap script", () => {
+    const interview = generateMockMaterial(context, {
+      ...baseOptions,
+      type: "INTERVIEW_PREP",
+    });
+
+    expect(interview).toContain("# Interview preparation");
+    expect(interview).toContain("## Likely questions");
+    expect(interview).toContain("**Answer outline (STAR):**");
+    expect(interview).toContain("TypeScript");
+    expect(interview).toContain("## Honest gap scripts");
+    expect(interview).toContain("I don't yet have direct professional experience");
+    // A missing requirement must never get an invented STAR result.
+    expect(interview).toContain("No evidence yet — do not invent one");
   });
 });

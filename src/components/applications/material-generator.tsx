@@ -8,11 +8,14 @@ import {
   Copy,
   Download,
   Loader2,
+  Map,
+  MessagesSquare,
   PenLine,
   RefreshCw,
   Sparkles,
   Square,
   Wand2,
+  type LucideIcon,
 } from "lucide-react";
 
 import { MaterialMarkdown } from "@/components/applications/material-markdown";
@@ -23,15 +26,21 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   EMPHASIS_LABELS,
+  HORIZON_LABELS,
+  INTERVIEW_FOCUS_LABELS,
+  INTERVIEW_FOCUSES,
   LENGTH_LABELS,
   MATERIAL_EMPHASES,
   MATERIAL_LENGTHS,
   MATERIAL_TONES,
+  ROADMAP_HORIZONS,
   TONE_LABELS,
+  type InterviewFocus,
   type MaterialEmphasis,
   type MaterialLength,
   type MaterialTone,
   type MaterialType,
+  type RoadmapHorizon,
 } from "@/lib/generation/types";
 import { cn, formatDate } from "@/lib/utils";
 
@@ -55,6 +64,78 @@ type DoneInfo = {
   outputTokens: number;
 };
 
+type MaterialUi = {
+  label: string;
+  emptyTitle: string;
+  emptyBody: string;
+  settingsTitle: string;
+  settingsBody: string;
+  generateLabel: string;
+  fileBase: string;
+  extension: string;
+  icon: LucideIcon;
+  markdown: boolean;
+};
+
+const UI: Record<MaterialType, MaterialUi> = {
+  COVER_LETTER: {
+    label: "Cover letter",
+    emptyTitle: "No cover letter yet",
+    emptyBody:
+      "Generate a letter grounded in the evidence behind this analysis.",
+    settingsTitle: "Letter settings",
+    settingsBody:
+      "Generated from this analysis, the job description and cited CV passages.",
+    generateLabel: "Generate cover letter",
+    fileBase: "cover-letter",
+    extension: "txt",
+    icon: PenLine,
+    markdown: false,
+  },
+  CV_SUGGESTIONS: {
+    label: "CV suggestions",
+    emptyTitle: "No suggestions yet",
+    emptyBody:
+      "Generate requirement-by-requirement edits, with draft bullets clearly marked for verification.",
+    settingsTitle: "Suggestion settings",
+    settingsBody:
+      "Covers every partial and missing requirement, prioritising must-haves.",
+    generateLabel: "Generate suggestions",
+    fileBase: "cv-suggestions",
+    extension: "md",
+    icon: Sparkles,
+    markdown: true,
+  },
+  ROADMAP: {
+    label: "Skill-gap roadmap",
+    emptyTitle: "No roadmap yet",
+    emptyBody:
+      "Turn the gaps into a dated plan with the evidence each step should produce.",
+    settingsTitle: "Roadmap settings",
+    settingsBody:
+      "Sequences missing must-haves first, then adjacent evidence and nice-to-haves.",
+    generateLabel: "Generate roadmap",
+    fileBase: "skill-gap-roadmap",
+    extension: "md",
+    icon: Map,
+    markdown: true,
+  },
+  INTERVIEW_PREP: {
+    label: "Interview preparation",
+    emptyTitle: "No interview prep yet",
+    emptyBody:
+      "Generate likely questions, STAR outlines from your evidence, and honest gap scripts.",
+    settingsTitle: "Interview settings",
+    settingsBody:
+      "Questions come from this analysis; gaps get a truthful script, not an invented story.",
+    generateLabel: "Generate interview prep",
+    fileBase: "interview-prep",
+    extension: "md",
+    icon: MessagesSquare,
+    markdown: true,
+  },
+};
+
 export function MaterialGenerator({
   applicationId,
   materialType,
@@ -67,11 +148,15 @@ export function MaterialGenerator({
   mockMode: boolean;
 }) {
   const router = useRouter();
+  const ui = UI[materialType];
 
   const [tone, setTone] = React.useState<MaterialTone>("professional");
   const [length, setLength] = React.useState<MaterialLength>("standard");
   const [emphasis, setEmphasis] =
     React.useState<MaterialEmphasis>("experience");
+  const [horizon, setHorizon] = React.useState<RoadmapHorizon>("4_weeks");
+  const [interviewFocus, setInterviewFocus] =
+    React.useState<InterviewFocus>("balanced");
   const [note, setNote] = React.useState("");
 
   const [selectedId, setSelectedId] = React.useState<string | null>(
@@ -84,7 +169,6 @@ export function MaterialGenerator({
   const [copied, setCopied] = React.useState(false);
   const controllerRef = React.useRef<AbortController | null>(null);
 
-  const isCoverLetter = materialType === "COVER_LETTER";
   const optionDocs = React.useMemo(() => {
     if (!liveDoc || docs.some((doc) => doc.id === liveDoc.id)) return docs;
     return [liveDoc, ...docs];
@@ -92,6 +176,7 @@ export function MaterialGenerator({
 
   const currentDoc = optionDocs.find((doc) => doc.id === selectedId) ?? null;
   const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
+  const Icon = ui.icon;
 
   React.useEffect(() => {
     return () => controllerRef.current?.abort();
@@ -123,7 +208,9 @@ export function MaterialGenerator({
             tone,
             length,
             emphasis,
-            note: isCoverLetter ? note : "",
+            horizon,
+            interviewFocus,
+            note: materialType === "COVER_LETTER" ? note : "",
           }),
         },
       );
@@ -234,7 +321,6 @@ export function MaterialGenerator({
 
   function download() {
     if (!content) return;
-    const extension = isCoverLetter ? "txt" : "md";
     const version = currentDoc?.version ?? 1;
     const blob = new Blob([content], {
       type: "text/plain;charset=utf-8",
@@ -242,9 +328,7 @@ export function MaterialGenerator({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${
-      isCoverLetter ? "cover-letter" : "cv-suggestions"
-    }-v${version}.${extension}`;
+    link.download = `${ui.fileBase}-v${version}.${ui.extension}`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -257,9 +341,8 @@ export function MaterialGenerator({
         <div className="rounded-xl border bg-card shadow-sm">
           <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
             <div className="flex min-w-0 flex-1 items-center gap-2">
-              <h2 className="truncate text-sm font-semibold">
-                {isCoverLetter ? "Cover letter" : "CV suggestions"}
-              </h2>
+              <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+              <h2 className="truncate text-sm font-semibold">{ui.label}</h2>
               {currentDoc ? (
                 <Badge variant="secondary">v{currentDoc.version}</Badge>
               ) : null}
@@ -319,14 +402,14 @@ export function MaterialGenerator({
 
           <div className="px-4 py-5 sm:px-6">
             {content ? (
-              isCoverLetter ? (
-                <div className="whitespace-pre-wrap text-sm leading-7">
-                  {content}
+              ui.markdown ? (
+                <div>
+                  <MaterialMarkdown content={content} />
                   {streaming ? <Caret /> : null}
                 </div>
               ) : (
-                <div>
-                  <MaterialMarkdown content={content} />
+                <div className="whitespace-pre-wrap text-sm leading-7">
+                  {content}
                   {streaming ? <Caret /> : null}
                 </div>
               )
@@ -338,21 +421,11 @@ export function MaterialGenerator({
             ) : (
               <div className="flex flex-col items-center justify-center py-14 text-center">
                 <span className="grid size-11 place-items-center rounded-xl bg-muted text-muted-foreground">
-                  {isCoverLetter ? (
-                    <PenLine className="size-5" aria-hidden />
-                  ) : (
-                    <Sparkles className="size-5" aria-hidden />
-                  )}
+                  <Icon className="size-5" aria-hidden />
                 </span>
-                <h3 className="mt-4 text-sm font-semibold">
-                  {isCoverLetter
-                    ? "No cover letter yet"
-                    : "No suggestions yet"}
-                </h3>
+                <h3 className="mt-4 text-sm font-semibold">{ui.emptyTitle}</h3>
                 <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                  {isCoverLetter
-                    ? "Generate a letter grounded in the evidence behind this analysis."
-                    : "Generate requirement-by-requirement edits, with draft bullets clearly marked for verification."}
+                  {ui.emptyBody}
                 </p>
                 <Button
                   type="button"
@@ -375,7 +448,7 @@ export function MaterialGenerator({
                 ? ` · prompt ${currentDoc.promptVersion}`
                 : ""}
             </span>
-            <span>Review before sending. Evidence only — verify every claim.</span>
+            <span>Review before using. Evidence only — verify every claim.</span>
           </div>
         </div>
       </section>
@@ -383,23 +456,15 @@ export function MaterialGenerator({
       <aside className="order-1 space-y-3 lg:order-2 lg:sticky lg:top-24">
         <div className="rounded-xl border bg-card p-4 shadow-sm">
           <div className="flex items-center gap-2">
-            {isCoverLetter ? (
-              <PenLine className="size-4 text-muted-foreground" aria-hidden />
-            ) : (
-              <Sparkles className="size-4 text-muted-foreground" aria-hidden />
-            )}
-            <h2 className="text-sm font-semibold">
-              {isCoverLetter ? "Letter settings" : "Suggestion settings"}
-            </h2>
+            <Icon className="size-4 text-muted-foreground" aria-hidden />
+            <h2 className="text-sm font-semibold">{ui.settingsTitle}</h2>
           </div>
 
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            {isCoverLetter
-              ? "Generated from this analysis, the job description and cited CV passages."
-              : "Covers every partial and missing requirement, prioritising must-haves."}
+            {ui.settingsBody}
           </p>
 
-          {isCoverLetter ? (
+          {materialType === "COVER_LETTER" ? (
             <div className="mt-4 space-y-3.5">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -472,6 +537,54 @@ export function MaterialGenerator({
                 </p>
               </div>
             </div>
+          ) : materialType === "ROADMAP" ? (
+            <div className="mt-4 space-y-3.5">
+              <div className="space-y-1.5">
+                <Label htmlFor="horizon">Plan for</Label>
+                <Select
+                  id="horizon"
+                  value={horizon}
+                  onChange={(event) =>
+                    setHorizon(event.target.value as RoadmapHorizon)
+                  }
+                  disabled={streaming}
+                >
+                  {ROADMAP_HORIZONS.map((value) => (
+                    <option key={value} value={value}>
+                      {HORIZON_LABELS[value]}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="rounded-lg border border-border/70 bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
+                Missing requirements become learning steps with evidence to
+                produce. They are never presented as experience you already have.
+              </div>
+            </div>
+          ) : materialType === "INTERVIEW_PREP" ? (
+            <div className="mt-4 space-y-3.5">
+              <div className="space-y-1.5">
+                <Label htmlFor="interview-focus">Focus</Label>
+                <Select
+                  id="interview-focus"
+                  value={interviewFocus}
+                  onChange={(event) =>
+                    setInterviewFocus(event.target.value as InterviewFocus)
+                  }
+                  disabled={streaming}
+                >
+                  {INTERVIEW_FOCUSES.map((value) => (
+                    <option key={value} value={value}>
+                      {INTERVIEW_FOCUS_LABELS[value]}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="rounded-lg border border-border/70 bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
+                Matched evidence becomes STAR outlines. Missing requirements get
+                an honest gap script instead of an invented story.
+              </div>
+            </div>
           ) : (
             <div className="mt-4 rounded-lg border border-border/70 bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
               Suggestions never invent experience. Missing requirements get a
@@ -509,9 +622,7 @@ export function MaterialGenerator({
               ) : (
                 <>
                   <Wand2 aria-hidden />
-                  {isCoverLetter
-                    ? "Generate cover letter"
-                    : "Generate suggestions"}
+                  {ui.generateLabel}
                 </>
               )}
             </Button>

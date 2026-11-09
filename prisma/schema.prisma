@@ -58,6 +58,7 @@ enum GeneratedDocType {
   COVER_LETTER
   CV_SUGGESTIONS
   ROADMAP
+  INTERVIEW_PREP
 }
 
 enum QuestionCategory {

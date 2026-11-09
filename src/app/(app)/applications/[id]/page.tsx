@@ -7,6 +7,8 @@ import {
   CheckCircle2,
   ExternalLink,
   FileText,
+  Map,
+  MessagesSquare,
   PenLine,
   Quote,
   Sparkles,
@@ -45,13 +47,32 @@ type Params = { params: Promise<{ id: string }> };
 type PageProps = Params & {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
-type TabKey = "overview" | "cover-letter" | "suggestions";
+type TabKey =
+  | "overview"
+  | "cover-letter"
+  | "suggestions"
+  | "roadmap"
+  | "interview";
 
 const TABS: Array<{ key: TabKey; label: string; icon: typeof Target }> = [
   { key: "overview", label: "Analysis", icon: Target },
   { key: "cover-letter", label: "Cover letter", icon: PenLine },
   { key: "suggestions", label: "CV suggestions", icon: Sparkles },
+  { key: "roadmap", label: "Roadmap", icon: Map },
+  { key: "interview", label: "Interview prep", icon: MessagesSquare },
 ];
+
+function parseTab(value: string | string[] | undefined): TabKey {
+  switch (value) {
+    case "cover-letter":
+    case "suggestions":
+    case "roadmap":
+    case "interview":
+      return value;
+    default:
+      return "overview";
+  }
+}
 
 function toMaterialDocView(
   document: {
@@ -101,12 +122,7 @@ export default async function ApplicationDetailPage({
   const user = await requireUser();
   const { id } = await params;
   const search = await searchParams;
-  const currentTab: TabKey =
-    search.tab === "cover-letter"
-      ? "cover-letter"
-      : search.tab === "suggestions"
-        ? "suggestions"
-        : "overview";
+  const currentTab: TabKey = parseTab(search.tab);
 
   const application = await prisma.application.findFirst({
     where: { id, userId: user.id },
@@ -180,6 +196,12 @@ export default async function ApplicationDetailPage({
   const suggestionDocs: MaterialDocView[] = documents
     .filter((document) => document.type === "CV_SUGGESTIONS")
     .map((document) => toMaterialDocView(document, "CV_SUGGESTIONS"));
+  const roadmapDocs: MaterialDocView[] = documents
+    .filter((document) => document.type === "ROADMAP")
+    .map((document) => toMaterialDocView(document, "ROADMAP"));
+  const interviewDocs: MaterialDocView[] = documents
+    .filter((document) => document.type === "INTERVIEW_PREP")
+    .map((document) => toMaterialDocView(document, "INTERVIEW_PREP"));
 
   return (
     <>
@@ -260,7 +282,11 @@ export default async function ApplicationDetailPage({
                   ? coverLetterDocs.length
                   : tab.key === "suggestions"
                     ? suggestionDocs.length
-                    : 0;
+                    : tab.key === "roadmap"
+                      ? roadmapDocs.length
+                      : tab.key === "interview"
+                        ? interviewDocs.length
+                        : 0;
 
               return (
                 <Link
@@ -300,11 +326,25 @@ export default async function ApplicationDetailPage({
               docs={coverLetterDocs}
               mockMode={env.llmMockMode}
             />
-          ) : (
+          ) : currentTab === "suggestions" ? (
             <MaterialGenerator
               applicationId={application.id}
               materialType="CV_SUGGESTIONS"
               docs={suggestionDocs}
+              mockMode={env.llmMockMode}
+            />
+          ) : currentTab === "roadmap" ? (
+            <MaterialGenerator
+              applicationId={application.id}
+              materialType="ROADMAP"
+              docs={roadmapDocs}
+              mockMode={env.llmMockMode}
+            />
+          ) : (
+            <MaterialGenerator
+              applicationId={application.id}
+              materialType="INTERVIEW_PREP"
+              docs={interviewDocs}
               mockMode={env.llmMockMode}
             />
           )}

@@ -6,8 +6,8 @@ in your CV that proves it. Then generate the materials that close the gap.
 
 ## Status
 
-Phases 1 (foundation), 2 (CV ingestion), 3 (job matching) and 4 (generated
-materials) are complete:
+Phases 1 (foundation), 2 (CV ingestion), 3 (job matching), 4 (generated
+materials) and 5 (roadmap and interview prep) are complete:
 
 - Next.js 16 App Router, TypeScript, Tailwind v4, hand-rolled shadcn-style UI
 - Credentials auth (email + password, bcrypt, Auth.js JWT sessions)
@@ -22,6 +22,8 @@ materials) are complete:
   list/detail/dashboard views
 - Streamed cover letters and CV improvement suggestions with tone, length and
   focus controls, version history, copy/download and evidence-only guardrails
+- Skill-gap roadmap (4- or 12-week horizon) and interview preparation with
+  evidence-based STAR outlines, honest gap scripts and follow-up questions
 - Offline deterministic pipeline for extraction, retrieval, verdicts and
   generated materials when no OpenAI key is configured
 
@@ -145,7 +147,16 @@ for exact cosine search. Add an index when chunk volume grows.
 
 ### Generated materials
 
-The cover letter and CV suggestion tabs generate from the stored analysis only.
+The application detail tabs generate from the stored analysis only. There are
+four document types:
+
+| Type | What it produces | Options |
+| --- | --- | --- |
+| Cover letter | A send-ready letter in plain text | Tone, length, emphasis, personal note |
+| CV suggestions | Requirement-by-requirement edits and draft bullets | None |
+| Skill-gap roadmap | Phased learning and evidence-building plan | 4-week or 12-week horizon |
+| Interview prep | Likely questions, STAR outlines and gap scripts | Balanced, technical or behavioural focus |
+
 `loadMaterialContext` loads the job, rubric result and each requirement's cited
 CV snippets; missing requirements are passed as goals, never as candidate
 experience.
@@ -168,6 +179,11 @@ POST /api/applications/[id]/materials
 - Cover letters accept tone, length, emphasis and a candidate-supplied note. CV
   suggestions cover every partial and missing requirement, prioritise
   must-haves, and only draft a bullet from evidence the candidate already has.
+- Roadmaps sequence missing must-haves first, then partial must-haves, then
+  nice-to-haves. Each step names an observable "done when" and the evidence to
+  produce; missing requirements never become claims.
+- Interview prep converts matched and partial evidence into STAR outlines, moves
+  missing requirements into honest gap scripts, and adds realistic follow-ups.
 - The version selector switches between saved documents without regenerating.
 - With no `OPENAI_API_KEY`, a deterministic writer produces the same
   evidence-only shape so the full flow works offline.
@@ -200,6 +216,7 @@ npm run test:run     # vitest once
    evidence-backed scoring UI, application views ✅
 4. **Generated materials** — streamed, versioned cover letters and CV
    suggestions with evidence guardrails ✅
-5. Skill-gap roadmap and interview preparation
+5. **Roadmap and interview prep** — phased gap plan, STAR outlines and honest
+   gap scripts ✅
 6. Application tracker (list, kanban, timeline), dashboard metrics, seed data,
    tests and deployment notes

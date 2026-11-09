@@ -6,11 +6,13 @@ import { loadMaterialContext } from "@/lib/generation/context";
 import { streamMaterial } from "@/lib/generation/generate";
 import { saveGeneratedMaterial } from "@/lib/generation/persist";
 import {
+  INTERVIEW_FOCUSES,
   MATERIAL_EMPHASES,
   MATERIAL_LENGTHS,
   MATERIAL_TONES,
   MATERIAL_TYPES,
   MaterialError,
+  ROADMAP_HORIZONS,
   type MaterialOptions,
 } from "@/lib/generation/types";
 
@@ -22,6 +24,11 @@ const bodySchema = z.object({
   tone: z.enum(MATERIAL_TONES).optional().default("professional"),
   length: z.enum(MATERIAL_LENGTHS).optional().default("standard"),
   emphasis: z.enum(MATERIAL_EMPHASES).optional().default("experience"),
+  horizon: z.enum(ROADMAP_HORIZONS).optional().default("4_weeks"),
+  interviewFocus: z
+    .enum(INTERVIEW_FOCUSES)
+    .optional()
+    .default("balanced"),
   note: z.string().trim().max(500, "Keep the note under 500 characters.").optional().default(""),
 });
 

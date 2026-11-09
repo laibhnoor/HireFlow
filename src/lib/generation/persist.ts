@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import {
   MATERIAL_TITLES,
+  MATERIAL_USAGE_KINDS,
   type MaterialType,
 } from "@/lib/generation/types";
 
@@ -59,7 +60,7 @@ export async function saveGeneratedMaterial({
     prisma.usageLog.create({
       data: {
         userId,
-        kind: type === "COVER_LETTER" ? "cover_letter" : "cv_suggestions",
+        kind: MATERIAL_USAGE_KINDS[type],
         model,
         inputTokens,
         outputTokens,

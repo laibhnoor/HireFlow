@@ -1,12 +1,14 @@
 import {
   EMPHASIS_LABELS,
+  HORIZON_LABELS,
+  INTERVIEW_FOCUS_LABELS,
   LENGTH_LABELS,
   TONE_LABELS,
   type MaterialContext,
   type MaterialOptions,
 } from "@/lib/generation/types";
 
-export const MATERIAL_PROMPT_VERSION = "2026-11-09.1";
+export const MATERIAL_PROMPT_VERSION = "2026-11-09.2";
 
 const MAX_DESCRIPTION_CHARS = 6_000;
 
@@ -50,6 +52,74 @@ Hard rules:
 - For PARTIAL requirements, name the existing evidence and the specific missing detail to add, only where true.
 - Keep each section concise. Do not add generic advice that is unrelated to the role.`;
 
+const ROADMAP_SYSTEM = `You build a realistic skill-gap roadmap for one job application.
+
+Return GitHub-flavoured markdown only, shaped exactly like:
+# Skill-gap roadmap
+
+## Goal
+One sentence on the gap this plan closes.
+
+## Phase 1 — <theme> (<weeks>)
+### <requirement text>
+**Why it matters:** ...
+**Do this:** ...
+**Evidence to produce:** ...
+**Done when:** ...
+
+## Phase 2 — <theme> (<weeks>)
+### <requirement text>
+...
+
+## Keep doing
+- Requirement text that is already matched
+
+Hard rules:
+- Work only from the supplied requirements, verdicts and evidence. Never invent experience the candidate has.
+- MISSING requirements are learning goals, not existing skills. Note the gap plainly.
+- PARTIAL requirements need a specific way to strengthen the evidence that already exists.
+- Order by hiring impact: missing must-haves first, then partial must-haves, then nice-to-haves.
+- Respect the requested horizon. A 4-week plan must be achievable in 4 weeks; a 12-week plan can add depth, but never pad with generic advice.
+- Do not invent course names, URLs, prices or credentials. Name concrete activity types (ship a small feature, write a case study, run a review, build a demo) and the evidence they should produce.
+- "Done when" must be observable by a hiring manager.
+- Keep the output concise and specific to this role.`;
+
+const INTERVIEW_SYSTEM = `You prepare a candidate for an interview for one specific job.
+
+Return GitHub-flavoured markdown only, shaped exactly like:
+# Interview preparation
+
+## How to use this
+One sentence.
+
+## Likely questions
+### CATEGORY · IMPORTANCE: requirement text
+**Question:** ...
+**Why they ask:** ...
+**Answer outline (STAR):**
+- **Situation:** ...
+- **Task:** ...
+- **Action:** ...
+- **Result:** ...
+**Evidence to cite:** ... or "No evidence yet — use the honest gap script."
+**Follow-up to expect:** ...
+
+## Honest gap scripts
+### requirement text
+**Say:** ...
+**Then show:** ...
+
+## Questions to ask them
+- ...
+
+Hard rules:
+- Derive every question from the supplied requirements and job description. Do not add unrelated trivia.
+- For MATCHED and PARTIAL requirements, the STAR outline must be built only from the supplied evidence snippets. Leave the candidate to fill in numbers they know; never invent metrics or facts.
+- For MISSING requirements, never write a STAR outline. Put them in "Honest gap scripts" with a truthful answer that acknowledges the gap and shows how the candidate transfers adjacent evidence or is closing it.
+- Respect the requested focus: technical leans on skills/projects, behavioural leans on experience/ways of working, balanced covers both.
+- Ask the kinds of follow-ups a real interviewer would use.
+- Keep it practical and specific to this job.`;
+
 export function buildMaterialMessages(
   context: MaterialContext,
   options: MaterialOptions,
@@ -68,6 +138,8 @@ export function buildMaterialMessages(
       tone: TONE_LABELS[options.tone],
       length: LENGTH_LABELS[options.length],
       emphasis: EMPHASIS_LABELS[options.emphasis],
+      horizon: HORIZON_LABELS[options.horizon],
+      interviewFocus: INTERVIEW_FOCUS_LABELS[options.interviewFocus],
       note: options.note || "",
     },
     requirements: context.requirements.map((requirement) => ({
@@ -82,15 +154,47 @@ export function buildMaterialMessages(
   };
 
   return {
-    system:
+    system: systemFor(options.type),
+    user: instructionFor(options.type, payload),
+    maxTokens: options.type === "COVER_LETTER" ? 1200 : 2000,
+    temperature:
       options.type === "COVER_LETTER"
-        ? COVER_LETTER_SYSTEM
-        : SUGGESTIONS_SYSTEM,
-    user:
-      options.type === "COVER_LETTER"
-        ? `Write the cover letter for this application.\n\n${JSON.stringify(payload)}`
-        : `Write the CV improvement suggestions for this application.\n\n${JSON.stringify(payload)}`,
-    maxTokens: options.type === "COVER_LETTER" ? 1200 : 1800,
-    temperature: options.type === "COVER_LETTER" ? 0.5 : 0.2,
+        ? 0.5
+        : options.type === "CV_SUGGESTIONS"
+          ? 0.2
+          : 0.3,
   };
+}
+
+function systemFor(type: MaterialOptions["type"]) {
+  switch (type) {
+    case "COVER_LETTER":
+      return COVER_LETTER_SYSTEM;
+    case "CV_SUGGESTIONS":
+      return SUGGESTIONS_SYSTEM;
+    case "ROADMAP":
+      return ROADMAP_SYSTEM;
+    case "INTERVIEW_PREP":
+      return INTERVIEW_SYSTEM;
+  }
+}
+
+function instructionFor(
+  type: MaterialOptions["type"],
+  payload: unknown,
+) {
+  const instruction = (() => {
+    switch (type) {
+      case "COVER_LETTER":
+        return "Write the cover letter for this application.";
+      case "CV_SUGGESTIONS":
+        return "Write the CV improvement suggestions for this application.";
+      case "ROADMAP":
+        return "Write the skill-gap roadmap for this application.";
+      case "INTERVIEW_PREP":
+        return "Write the interview preparation guide for this application.";
+    }
+  })();
+
+  return `${instruction}\n\n${JSON.stringify(payload)}`;
 }
