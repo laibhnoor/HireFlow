@@ -5,6 +5,11 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { requireUser } from "@/lib/auth-guards";
+import {
+  APPLICATION_STATUSES,
+  STATUS_LABELS,
+} from "@/lib/applications/status";
+import { prisma } from "@/lib/db";
 import { analyzeJob } from "@/lib/jobs/analyze";
 import {
   AnalysisError,
@@ -86,4 +91,72 @@ export async function analyzeJobAction(
   revalidatePath("/applications");
   revalidatePath("/dashboard");
   redirect(`/applications/${applicationId}`);
+}
+
+const statusSchema = z.enum(APPLICATION_STATUSES);
+
+export type UpdateStatusResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/**
+ * Moves an application through the tracker pipeline. Every change writes an
+ * ApplicationEvent so the timeline stays a real audit trail.
+ */
+export async function updateApplicationStatusAction(
+  applicationId: string,
+  status: string,
+): Promise<UpdateStatusResult> {
+  const user = await requireUser();
+  const parsed = statusSchema.safeParse(status);
+
+  if (!parsed.success) {
+    return { ok: false, error: "Choose a valid application status." };
+  }
+
+  const application = await prisma.application.findFirst({
+    where: { id: applicationId, userId: user.id },
+    select: { id: true, status: true, appliedAt: true },
+  });
+
+  if (!application) {
+    return { ok: false, error: "That application could not be found." };
+  }
+
+  if (application.status === parsed.data) {
+    return { ok: true };
+  }
+
+  const nextStatus = parsed.data;
+  const appliedAt =
+    application.appliedAt ??
+    (nextStatus !== "SAVED" ? new Date() : null);
+
+  try {
+    await prisma.$transaction([
+      prisma.application.update({
+        where: { id: application.id },
+        data: { status: nextStatus, appliedAt },
+      }),
+      prisma.applicationEvent.create({
+        data: {
+          applicationId: application.id,
+          type: "STATUS_CHANGED",
+          note: `${STATUS_LABELS[application.status as keyof typeof STATUS_LABELS] ?? application.status} → ${STATUS_LABELS[nextStatus]}`,
+        },
+      }),
+    ]);
+  } catch (error) {
+    console.error("[tracker] status update failed", error);
+    return {
+      ok: false,
+      error: "The status could not be saved. Try again.",
+    };
+  }
+
+  revalidatePath("/applications");
+  revalidatePath("/dashboard");
+  revalidatePath(`/applications/${application.id}`);
+
+  return { ok: true };
 }

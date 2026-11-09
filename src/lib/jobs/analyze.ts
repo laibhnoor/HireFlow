@@ -198,6 +198,18 @@ export async function analyzeJob(
       console.error("[jobs] failed to write usage log", error);
     });
 
+  await prisma.applicationEvent
+    .create({
+      data: {
+        applicationId,
+        type: "ANALYSIS_COMPLETED",
+        note: `Scored ${scored.overallScore}/100 across ${classification.matches.length} requirements`,
+      },
+    })
+    .catch((error) => {
+      console.error("[jobs] failed to write application event", error);
+    });
+
   return {
     applicationId,
     overallScore: scored.overallScore,

@@ -16,7 +16,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 
-import { ApplicationStatusBadge } from "@/components/applications/application-status-badge";
+import { ApplicationStatusSelect } from "@/components/applications/application-status-select";
 import type { MaterialDocView } from "@/components/applications/material-generator";
 import { MaterialGenerator } from "@/components/applications/material-generator";
 import { ScoreRing } from "@/components/score-ring";
@@ -219,7 +219,12 @@ export default async function ApplicationDetailPage({
             <h1 className="text-2xl font-semibold tracking-tight">
               {job.title}
             </h1>
-            <ApplicationStatusBadge status={application.status} />
+            <ApplicationStatusSelect
+              applicationId={application.id}
+              status={application.status}
+              compact
+              className="w-36"
+            />
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             {job.company}
