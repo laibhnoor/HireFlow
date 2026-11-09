@@ -7,11 +7,16 @@ import {
   CheckCircle2,
   ExternalLink,
   FileText,
+  PenLine,
   Quote,
+  Sparkles,
+  Target,
   TriangleAlert,
 } from "lucide-react";
 
 import { ApplicationStatusBadge } from "@/components/applications/application-status-badge";
+import type { MaterialDocView } from "@/components/applications/material-generator";
+import { MaterialGenerator } from "@/components/applications/material-generator";
 import { ScoreRing } from "@/components/score-ring";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -24,6 +29,8 @@ import {
 } from "@/components/ui/card";
 import { requireUser } from "@/lib/auth-guards";
 import { prisma } from "@/lib/db";
+import { env } from "@/lib/env";
+import type { MaterialType } from "@/lib/generation/types";
 import {
   IMPORTANCE_LABELS,
   REQUIREMENT_TYPE_LABELS,
@@ -35,6 +42,41 @@ import {
 import { cn, formatDate } from "@/lib/utils";
 
 type Params = { params: Promise<{ id: string }> };
+type PageProps = Params & {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+type TabKey = "overview" | "cover-letter" | "suggestions";
+
+const TABS: Array<{ key: TabKey; label: string; icon: typeof Target }> = [
+  { key: "overview", label: "Analysis", icon: Target },
+  { key: "cover-letter", label: "Cover letter", icon: PenLine },
+  { key: "suggestions", label: "CV suggestions", icon: Sparkles },
+];
+
+function toMaterialDocView(
+  document: {
+    id: string;
+    type: string;
+    title: string;
+    content: string;
+    version: number;
+    model: string;
+    promptVersion: string;
+    createdAt: Date;
+  },
+  type: MaterialType,
+): MaterialDocView {
+  return {
+    id: document.id,
+    type,
+    title: document.title,
+    content: document.content,
+    version: document.version,
+    model: document.model,
+    promptVersion: document.promptVersion,
+    createdAt: document.createdAt.toISOString(),
+  };
+}
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const user = await requireUser();
@@ -52,9 +94,19 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   };
 }
 
-export default async function ApplicationDetailPage({ params }: Params) {
+export default async function ApplicationDetailPage({
+  params,
+  searchParams,
+}: PageProps) {
   const user = await requireUser();
   const { id } = await params;
+  const search = await searchParams;
+  const currentTab: TabKey =
+    search.tab === "cover-letter"
+      ? "cover-letter"
+      : search.tab === "suggestions"
+        ? "suggestions"
+        : "overview";
 
   const application = await prisma.application.findFirst({
     where: { id, userId: user.id },
@@ -71,6 +123,19 @@ export default async function ApplicationDetailPage({ params }: Params) {
           employmentType: true,
           url: true,
           description: true,
+        },
+      },
+      documents: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          type: true,
+          title: true,
+          content: true,
+          version: true,
+          model: true,
+          promptVersion: true,
+          createdAt: true,
         },
       },
       analysis: {
@@ -107,7 +172,14 @@ export default async function ApplicationDetailPage({ params }: Params) {
 
   if (!application) notFound();
 
-  const { job, cv, analysis } = application;
+  const { job, cv, analysis, documents } = application;
+
+  const coverLetterDocs: MaterialDocView[] = documents
+    .filter((document) => document.type === "COVER_LETTER")
+    .map((document) => toMaterialDocView(document, "COVER_LETTER"));
+  const suggestionDocs: MaterialDocView[] = documents
+    .filter((document) => document.type === "CV_SUGGESTIONS")
+    .map((document) => toMaterialDocView(document, "CV_SUGGESTIONS"));
 
   return (
     <>
@@ -175,11 +247,68 @@ export default async function ApplicationDetailPage({ params }: Params) {
           </CardContent>
         </Card>
       ) : (
-        <AnalysisBody
-          analysis={analysis}
-          matches={analysis.matches}
-          jobDescription={job.description}
-        />
+        <>
+          <nav
+            aria-label="Application sections"
+            className="mb-5 flex flex-wrap gap-1 rounded-xl border bg-card p-1 shadow-sm"
+          >
+            {TABS.map((tab) => {
+              const Icon = tab.icon;
+              const active = currentTab === tab.key;
+              const count =
+                tab.key === "cover-letter"
+                  ? coverLetterDocs.length
+                  : tab.key === "suggestions"
+                    ? suggestionDocs.length
+                    : 0;
+
+              return (
+                <Link
+                  key={tab.key}
+                  href={`/applications/${application.id}?tab=${tab.key}`}
+                  scroll={false}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors",
+                    active
+                      ? "bg-primary/10 font-medium text-primary"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  )}
+                >
+                  <Icon className="size-4" aria-hidden />
+                  {tab.label}
+                  {count > 0 ? (
+                    <span className="rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                      {count}
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </nav>
+
+          {currentTab === "overview" ? (
+            <AnalysisBody
+              analysis={analysis}
+              matches={analysis.matches}
+              jobDescription={job.description}
+            />
+          ) : currentTab === "cover-letter" ? (
+            <MaterialGenerator
+              applicationId={application.id}
+              materialType="COVER_LETTER"
+              docs={coverLetterDocs}
+              mockMode={env.llmMockMode}
+            />
+          ) : (
+            <MaterialGenerator
+              applicationId={application.id}
+              materialType="CV_SUGGESTIONS"
+              docs={suggestionDocs}
+              mockMode={env.llmMockMode}
+            />
+          )}
+        </>
       )}
     </>
   );

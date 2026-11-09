@@ -6,7 +6,8 @@ in your CV that proves it. Then generate the materials that close the gap.
 
 ## Status
 
-Phases 1 (foundation), 2 (CV ingestion) and 3 (job matching) are complete:
+Phases 1 (foundation), 2 (CV ingestion), 3 (job matching) and 4 (generated
+materials) are complete:
 
 - Next.js 16 App Router, TypeScript, Tailwind v4, hand-rolled shadcn-style UI
 - Credentials auth (email + password, bcrypt, Auth.js JWT sessions)
@@ -19,8 +20,10 @@ Phases 1 (foundation), 2 (CV ingestion) and 3 (job matching) are complete:
 - Job analysis: LLM/heuristic requirement extraction, pgvector cosine retrieval,
   per-requirement verdicts with cited evidence, rubric score, and application
   list/detail/dashboard views
-- Offline deterministic pipeline for extraction, retrieval and verdicts when no
-  OpenAI key is configured
+- Streamed cover letters and CV improvement suggestions with tone, length and
+  focus controls, version history, copy/download and evidence-only guardrails
+- Offline deterministic pipeline for extraction, retrieval, verdicts and
+  generated materials when no OpenAI key is configured
 
 ## Quick start
 
@@ -74,19 +77,21 @@ src/
     (auth)/            login, signup, server actions
     (app)/             workspace shell (dashboard, cv, applications, settings)
     api/auth/          Auth.js route handler
+    api/applications/  SSE material generation route
     api/cv/            authenticated CV upload and download routes
   components/
     app/               shell, nav, page chrome
-    applications/      analyzer form, score chip, status badge
+    applications/      analyzer form, score chip, status badge, material generator
     auth/              forms
     cv/                uploader, status badge, delete controls
     ui/                primitives
   lib/
-    ai/                OpenAI client, JSON-mode chat, embeddings + mock fallback
+    ai/                OpenAI client, JSON-mode chat, streaming chat, embeddings
     auth-guards.ts     server-side session guard
     cv/                validation, extraction, section parsing, chunking, ingest
     db.ts              Prisma singleton
     env.ts             validated environment
+    generation/        context, prompts, mock writer, streaming orchestration
     jobs/              extraction, retrieval, classification, orchestration
     scoring.ts         rubric v1.0, dimensions and weighted scoring
     text.ts            shared tokenizer and text helpers
@@ -138,6 +143,35 @@ CV suggestions, roadmap and interview prep consistent with the analysis.
 HNSW indexing is intentionally deferred; per-CV chunk counts are small enough
 for exact cosine search. Add an index when chunk volume grows.
 
+### Generated materials
+
+The cover letter and CV suggestion tabs generate from the stored analysis only.
+`loadMaterialContext` loads the job, rubric result and each requirement's cited
+CV snippets; missing requirements are passed as goals, never as candidate
+experience.
+
+```
+POST /api/applications/[id]/materials
+  -> text/event-stream
+     event: delta  { text }
+     event: done   { docId, version, model, promptVersion, inputTokens, outputTokens }
+     event: error  { message }
+```
+
+- The route is a streaming `Response`, not a server action, so tokens arrive
+  while the document is written.
+- A document is persisted only after the stream completes successfully. Stopping
+  the stream or a provider failure saves nothing and reports the error in the UI.
+- Every completed run inserts a new `GeneratedDoc` with the next `version` for
+  that application and type, plus the model, prompt version and token counts.
+  Usage logs and an `ApplicationEvent` are written alongside it.
+- Cover letters accept tone, length, emphasis and a candidate-supplied note. CV
+  suggestions cover every partial and missing requirement, prioritise
+  must-haves, and only draft a bullet from evidence the candidate already has.
+- The version selector switches between saved documents without regenerating.
+- With no `OPENAI_API_KEY`, a deterministic writer produces the same
+  evidence-only shape so the full flow works offline.
+
 ### Uploads
 
 Original CV files are stored as `bytea` in `Cv.fileBytes` (10 MB cap) and served
@@ -155,6 +189,7 @@ npm run db:migrate   # prisma migrate dev
 npm run db:studio    # Prisma Studio
 npm run db:generate  # regenerate the client
 npm run test         # vitest (watch)
+npm run test:run     # vitest once
 ```
 
 ## Roadmap
@@ -163,7 +198,8 @@ npm run test         # vitest (watch)
 2. **CV ingestion** — upload, parsing, chunking, embeddings, library UI ✅
 3. **Job matching** — requirement extraction, pgvector retrieval,
    evidence-backed scoring UI, application views ✅
-4. Streamed cover letters and CV improvement suggestions
+4. **Generated materials** — streamed, versioned cover letters and CV
+   suggestions with evidence guardrails ✅
 5. Skill-gap roadmap and interview preparation
 6. Application tracker (list, kanban, timeline), dashboard metrics, seed data,
    tests and deployment notes
