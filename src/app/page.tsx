@@ -88,7 +88,7 @@ export default function LandingPage() {
     <div className="flex min-h-svh flex-col">
       <SiteHeader />
 
-      <main className="flex-1">
+      <main id="main" className="flex-1">
         {/* Hero */}
         <section className="relative overflow-hidden border-b border-border/60">
           <div className="pointer-events-none absolute inset-0 grid-bg opacity-60" />

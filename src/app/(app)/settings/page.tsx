@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Cpu, LogOut, UserRound } from "lucide-react";
+import { Cpu, Gauge, LogOut, UserRound } from "lucide-react";
 
 import { signOutAction } from "@/app/(app)/actions";
 import { PageHeader } from "@/components/app/page-header";
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { requireUser } from "@/lib/auth-guards";
 import { env } from "@/lib/env";
+import { formatResetTime, getDailyUsage, type Quota } from "@/lib/usage";
 
 export const metadata: Metadata = {
   title: "Settings",
@@ -22,6 +23,25 @@ export const metadata: Metadata = {
 export default async function SettingsPage() {
   const user = await requireUser();
   const mockMode = env.llmMockMode;
+  const usage = await getDailyUsage(user.id);
+
+  const usageRows: Array<{ label: string; hint: string; quota: Quota }> = [
+    {
+      label: "Job analyses",
+      hint: "Requirement extraction, retrieval and scoring",
+      quota: usage.analyses,
+    },
+    {
+      label: "Generated materials",
+      hint: "Cover letters, suggestions, roadmaps and interview prep",
+      quota: usage.materials,
+    },
+    {
+      label: "CV uploads",
+      hint: "Extraction and embedding of new documents",
+      quota: usage.cvUploads,
+    },
+  ];
 
   return (
     <>
@@ -93,6 +113,68 @@ export default async function SettingsPage() {
                 </dd>
               </div>
             </dl>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Gauge className="size-4 text-muted-foreground" aria-hidden />
+                <CardTitle>Daily usage</CardTitle>
+              </div>
+              <Badge variant="outline">
+                Resets {formatResetTime(usage.resetsAt)}
+              </Badge>
+            </div>
+            <CardDescription>
+              Cost controls apply per account and reset at midnight UTC.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {usageRows.map((row) => {
+              const percent = Math.min(
+                100,
+                Math.round((row.quota.used / row.quota.limit) * 100),
+              );
+              const full = !row.quota.allowed;
+
+              return (
+                <div key={row.label}>
+                  <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
+                    <span className="font-medium">{row.label}</span>
+                    <span
+                      className={
+                        full
+                          ? "font-medium tabular-nums text-destructive"
+                          : "tabular-nums text-muted-foreground"
+                      }
+                    >
+                      {row.quota.used} / {row.quota.limit}
+                    </span>
+                  </div>
+                  <div
+                    className="h-1.5 overflow-hidden rounded-full bg-muted"
+                    role="img"
+                    aria-label={`${row.label}: ${row.quota.used} of ${row.quota.limit} used today`}
+                  >
+                    <div
+                      className={
+                        full
+                          ? "h-full rounded-full bg-destructive"
+                          : percent >= 75
+                            ? "h-full rounded-full bg-warning"
+                            : "h-full rounded-full bg-primary/80"
+                      }
+                      style={{ width: `${percent}%` }}
+                    />
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {row.hint}
+                  </p>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
 

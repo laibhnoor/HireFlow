@@ -130,6 +130,7 @@ export default async function ApplicationDetailPage({
       id: true,
       status: true,
       createdAt: true,
+      _count: { select: { questions: true } },
       cv: { select: { id: true, title: true } },
       job: {
         select: {
@@ -351,6 +352,7 @@ export default async function ApplicationDetailPage({
               materialType="INTERVIEW_PREP"
               docs={interviewDocs}
               mockMode={env.llmMockMode}
+              savedQuestionCount={application._count.questions}
             />
           )}
         </>

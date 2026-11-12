@@ -7,8 +7,8 @@ in your CV that proves it. Then generate the materials that close the gap.
 ## Status
 
 Phases 1 (foundation), 2 (CV ingestion), 3 (job matching), 4 (generated
-materials), 5 (roadmap and interview prep) and 6 (tracker and dashboard) are
-complete:
+materials), 5 (roadmap and interview prep), 6 (tracker and dashboard) and 7
+(hardening and AI quality) are complete:
 
 - Next.js 16 App Router, TypeScript, Tailwind v4, hand-rolled shadcn-style UI
 - Credentials auth (email + password, bcrypt, Auth.js JWT sessions)
@@ -33,6 +33,15 @@ complete:
   four pre-generated documents
 - Offline deterministic pipeline for extraction, retrieval, verdicts and
   generated materials when no OpenAI key is configured
+- Daily per-account quotas for analyses, generated materials and CV uploads,
+  with a usage card in settings
+- Best-effort login throttling and material-generation burst limits
+- Structured interview question bank persisted alongside each interview-prep
+  document
+- Extraction and classification evaluation tests, including the citation
+  guardrail
+- Accessibility and security hardening: skip link, landmarks, reduced motion,
+  and hardened response headers
 
 ## Quick start
 
@@ -112,11 +121,14 @@ src/
     cv/                validation, extraction, section parsing, chunking, ingest
     db.ts              Prisma singleton
     env.ts             validated environment
-    generation/        context, prompts, mock writer, streaming orchestration
+    generation/        context, prompts, mock writer, streaming orchestration,
+                       interview question parser
     jobs/              extraction, retrieval, classification, orchestration
+    rate-limit.ts      best-effort in-process burst and login limiters
     scoring.ts         rubric v1.0, dimensions and weighted scoring
     text.ts            shared tokenizer and text helpers
     tracker.ts         board grouping, metrics and timeline helpers
+    usage.ts           daily database-backed quotas
 prisma/
   schema.prisma        full data model
   migrations/          includes CREATE EXTENSION vector
@@ -246,6 +258,65 @@ Original CV files are stored as `bytea` in `Cv.fileBytes` (10 MB cap) and served
 only through an ownership-checked route. Nothing is written to public storage.
 Deleting a CV cascades to chunks, analyses and generated documents.
 
+### Cost controls and rate limits
+
+Quotas are per user and reset at midnight UTC. They are counted from persisted
+rows (`UsageLog` for AI calls, `Cv.createdAt` for uploads), so they survive
+restarts and work across instances:
+
+| Action | Daily limit | Counted from |
+| --- | --- | --- |
+| Job analysis | 20 | `UsageLog(kind = job_analysis)` |
+| Generated material | 40 | `UsageLog(kind = material_*)` |
+| CV upload | 10 | `Cv.createdAt` |
+
+When a limit is reached the action is rejected with a `429` (or an inline form
+error) that names the reset time. Settings shows the same numbers as progress
+bars. In-process limiters add two best-effort protections on top:
+
+- Sign-in failures: 8 per email per 15 minutes.
+- Material generation: 6 requests per user per minute.
+
+These limiters hold state in memory, so on serverless or multi-instance hosts
+each instance has its own window. The database quotas remain the durable cost
+control; move the burst windows to Redis if strict global limits are needed.
+The materials route also rejects bodies over 16 KB before parsing.
+
+### Interview question bank
+
+When an interview-prep document is saved, `parseInterviewQuestions` extracts the
+"Likely questions" section into `InterviewQuestion` rows: category, question,
+STAR hint, evidence prompt and follow-up. Rows are replaced per application on
+each new version, so the bank always matches the latest document. Parsing is
+best-effort and never rolls back a completed generation.
+
+### Quality tests
+
+`npm run test:run` includes deterministic evaluation fixtures for the offline
+pipeline:
+
+- Extraction keeps must-have and nice-to-have sections separate, ignores company
+  intros and benefits, splits single-paragraph postings and accepts unheaded
+  bullet lists.
+- Classification marks direct keyword coverage as `MATCHED`, partial coverage as
+  `PARTIAL`, and unrelated passages as `MISSING`; a high similarity score alone
+  never creates a citation.
+- Every non-missing verdict is asserted to cite a chunk that was actually
+  supplied for that requirement.
+- Rubric weights, quota windows, rate-limiter behaviour, tracker metrics and the
+  interview markdown parser each have focused unit tests.
+
+### Security and accessibility
+
+- All responses set `Content-Security-Policy`, `X-Content-Type-Options`,
+  `X-Frame-Options`, `Referrer-Policy` and a restrictive `Permissions-Policy`;
+  production also sets HSTS. The CSP allows Next.js inline bootstrap scripts and
+  should be tightened with a nonce if third-party scripts are introduced.
+- The workspace, auth and marketing layouts expose a single `<main id="main">`
+  landmark and a keyboard-accessible "Skip to content" link.
+- Streaming states use `aria-busy` and polite live regions.
+- `prefers-reduced-motion` disables smooth scrolling, animations and transitions.
+
 ## Scripts
 
 ```bash
@@ -298,6 +369,9 @@ Operational notes:
   different dimension requires a new column and re-indexing.
 - Exact cosine search is used today. Add an HNSW index when chunk volume makes
   sequential scans noticeable.
+- The in-process login and burst limiters are per instance. Use a shared store
+  before running multiple instances behind a load balancer.
+- Terminate TLS at the proxy so the production HSTS header is effective.
 
 ## Roadmap
 
@@ -311,6 +385,6 @@ Operational notes:
    gap scripts ✅
 6. **Tracker and dashboard** — list, kanban and timeline views, status event
    history, dashboard metrics, demo seed, tests and deployment notes ✅
-
-Next: hardening and AI quality — broader evaluation fixtures, rate limiting and
-cost controls, richer interview question persistence, and accessibility polish.
+7. **Hardening and AI quality** — daily quotas, best-effort rate limits,
+   interview question persistence, extraction/classification evaluation tests,
+   accessibility and security headers ✅

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { parseInterviewQuestions } from "@/lib/generation/interview";
 import {
   MATERIAL_TITLES,
   MATERIAL_USAGE_KINDS,
@@ -75,5 +76,42 @@ export async function saveGeneratedMaterial({
     }),
   ]);
 
+  if (type === "INTERVIEW_PREP") {
+    await saveInterviewQuestions(applicationId, content);
+  }
+
   return { id: document.id, version: document.version };
+}
+
+/**
+ * Keeps the structured practice bank in sync with the latest interview-prep
+ * version. The document is the source of truth; a parser failure must never
+ * roll back a saved document.
+ */
+async function saveInterviewQuestions(
+  applicationId: string,
+  content: string,
+) {
+  const questions = parseInterviewQuestions(content);
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.interviewQuestion.deleteMany({ where: { applicationId } });
+
+      if (questions.length === 0) return;
+
+      await tx.interviewQuestion.createMany({
+        data: questions.map((question) => ({
+          applicationId,
+          category: question.category,
+          question: question.question,
+          starHint: question.starHint || null,
+          answer: question.answer || null,
+          ordinal: question.ordinal,
+        })),
+      });
+    });
+  } catch (error) {
+    console.error("[generation] failed to persist interview questions", error);
+  }
 }

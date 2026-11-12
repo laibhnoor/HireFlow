@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { signIn } from "@/auth";
 import { prisma } from "@/lib/db";
+import { loginAttemptLimiter } from "@/lib/rate-limit";
 
 export type AuthFormState = { error: string } | null;
 
@@ -34,6 +35,18 @@ export async function loginAction(
     return { error: "Enter a valid email address and password." };
   }
 
+  const gate = loginAttemptLimiter.check(parsed.data.email);
+  if (gate.blocked) {
+    const minutes = Math.max(1, Math.ceil(gate.retryAfterMs / 60_000));
+    return {
+      error: `Too many sign-in attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`,
+    };
+  }
+
+  // A fresh, allowed attempt clears the previous strike count. If it fails, the
+  // catch block records it immediately.
+  loginAttemptLimiter.reset(parsed.data.email);
+
   try {
     await signIn("credentials", {
       email: parsed.data.email,
@@ -43,6 +56,7 @@ export async function loginAction(
     return null;
   } catch (error) {
     if (error instanceof AuthError) {
+      loginAttemptLimiter.recordFailure(parsed.data.email);
       return { error: "That email and password combination doesn't match." };
     }
     throw error;

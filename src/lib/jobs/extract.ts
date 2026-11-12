@@ -185,20 +185,44 @@ const RECRUITING_PATTERN =
 
 function heuristicRequirements(description: string): ExtractedRequirement[] {
   const drafts: ExtractedRequirement[] = [];
-  let section: Section = "must";
 
-  for (const rawLine of description.replace(/\r\n?/g, "\n").split("\n")) {
+  const lines = description.replace(/\r\n?/g, "\n").split("\n");
+  const nonEmpty = lines.map((line) => line.trim()).filter(Boolean);
+
+  // A pasted paragraph has no useful line structure. Split it into sentences
+  // from the start instead of treating the whole block as one requirement.
+  const structured = nonEmpty.length >= 4;
+  const hasHeading = nonEmpty.some((line) =>
+    Boolean(detectHeading(normalizeWhitespace(line))),
+  );
+  const hasBullet = lines.some((line) => isBullet(line));
+
+  // In a structured posting, prose before the first heading or bullet is the
+  // company/role intro, not a requirement.
+  const skipPreamble = structured && (hasHeading || hasBullet);
+
+  let section: Section = skipPreamble ? "skip" : "must";
+  let seenHeading = false;
+
+  for (const rawLine of lines) {
     const line = normalizeWhitespace(rawLine);
     if (!line) continue;
 
     const heading = detectHeading(line);
     if (heading) {
       section = heading;
+      seenHeading = true;
       continue;
     }
-    if (section === "skip") continue;
 
-    const pieces = line.length > 320 ? splitSentences(line) : [line];
+    if (section === "skip") {
+      const leadingBullet = skipPreamble && !seenHeading && isBullet(rawLine);
+      if (!leadingBullet) continue;
+      section = "must";
+    }
+
+    const pieces =
+      !structured || line.length > 240 ? splitSentences(line) : [line];
     for (const piece of pieces) {
       const cleaned = cleanRequirement(piece);
       if (!cleaned) continue;
@@ -206,8 +230,9 @@ function heuristicRequirements(description: string): ExtractedRequirement[] {
     }
   }
 
-  // Pasting a description without line breaks is common. Fall back to sentences.
-  if (drafts.length < 6) {
+  // Pasting a description without line breaks is common. Fall back to sentences
+  // only for unstructured text; a real posting's bullets are already complete.
+  if (!structured && drafts.length < 6) {
     const sentences = splitSentences(description.replace(/\n+/g, " "));
     for (const sentence of sentences) {
       if (drafts.length >= 10) break;
@@ -241,6 +266,10 @@ function heuristicRequirements(description: string): ExtractedRequirement[] {
   }
 
   return picked;
+}
+
+function isBullet(line: string) {
+  return /^(?:[-–—•*·▪◦]|\d+[.)])\s+\S/.test(line.trim());
 }
 
 function detectHeading(line: string): Section | null {

@@ -141,11 +141,13 @@ export function MaterialGenerator({
   materialType,
   docs,
   mockMode,
+  savedQuestionCount = 0,
 }: {
   applicationId: string;
   materialType: MaterialType;
   docs: MaterialDocView[];
   mockMode: boolean;
+  savedQuestionCount?: number;
 }) {
   const router = useRouter();
   const ui = UI[materialType];
@@ -347,8 +349,15 @@ export function MaterialGenerator({
                 <Badge variant="secondary">v{currentDoc.version}</Badge>
               ) : null}
               {streaming ? (
-                <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+                <span
+                  role="status"
+                  aria-live="polite"
+                  className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground"
+                >
+                  <span
+                    className="size-1.5 animate-pulse rounded-full bg-primary"
+                    aria-hidden
+                  />
                   Writing…
                 </span>
               ) : null}
@@ -400,7 +409,7 @@ export function MaterialGenerator({
             </div>
           </div>
 
-          <div className="px-4 py-5 sm:px-6">
+          <div className="px-4 py-5 sm:px-6" aria-busy={streaming}>
             {content ? (
               ui.markdown ? (
                 <div>
@@ -584,6 +593,13 @@ export function MaterialGenerator({
                 Matched evidence becomes STAR outlines. Missing requirements get
                 an honest gap script instead of an invented story.
               </div>
+              {savedQuestionCount > 0 ? (
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  {savedQuestionCount} question
+                  {savedQuestionCount === 1 ? "" : "s"} saved in the practice
+                  bank from the latest version.
+                </p>
+              ) : null}
             </div>
           ) : (
             <div className="mt-4 rounded-lg border border-border/70 bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">

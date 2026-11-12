@@ -13,6 +13,7 @@ import {
   type ClassifiedRequirement,
 } from "@/lib/jobs/types";
 import { RUBRIC_VERSION, scoreMatches } from "@/lib/scoring";
+import { checkAnalysisQuota, quotaMessage } from "@/lib/usage";
 
 export type AnalyzeJobInput = {
   cvId: string;
@@ -46,6 +47,11 @@ export async function analyzeJob(
       422,
       "Paste at least a few sentences of the job description (80 characters minimum).",
     );
+  }
+
+  const quota = await checkAnalysisQuota(userId);
+  if (!quota.allowed) {
+    throw new AnalysisError(429, quotaMessage("analysis", quota));
   }
 
   const cv = await prisma.cv.findFirst({

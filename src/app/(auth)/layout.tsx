@@ -68,7 +68,7 @@ export default function AuthLayout({
         </div>
       </div>
 
-      <div className="flex flex-col">
+      <main id="main" className="flex flex-col">
         <div className="p-6 lg:hidden">
           <Link href="/" aria-label="HireFlow home" className="inline-flex">
             <Logo />
@@ -82,7 +82,7 @@ export default function AuthLayout({
         <p className="px-6 pb-6 text-center text-xs text-muted-foreground">
           Your CV is stored privately and never shared with employers.
         </p>
-      </div>
+      </main>
     </div>
   );
 }

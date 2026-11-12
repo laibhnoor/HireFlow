@@ -15,9 +15,17 @@ import {
   ROADMAP_HORIZONS,
   type MaterialOptions,
 } from "@/lib/generation/types";
+import {
+  materialBurstLimiter,
+  retryAfterSeconds,
+} from "@/lib/rate-limit";
+import { checkMaterialQuota, quotaMessage } from "@/lib/usage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+/** The request is a handful of short fields; nothing legitimate is this big. */
+const MAX_BODY_BYTES = 16 * 1024;
 
 const bodySchema = z.object({
   type: z.enum(MATERIAL_TYPES),
@@ -45,7 +53,21 @@ export async function POST(
 
   const { id } = await params;
 
-  const body = await request.json().catch(() => null);
+  const raw = await request.text().catch(() => "");
+  if (raw.length > MAX_BODY_BYTES) {
+    return NextResponse.json(
+      { error: "That request is too large." },
+      { status: 413 },
+    );
+  }
+
+  let body: unknown = null;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    body = null;
+  }
+
   const parsed = bodySchema.safeParse(body);
 
   if (!parsed.success) {
@@ -56,6 +78,29 @@ export async function POST(
           "Check the generation options and try again.",
       },
       { status: 400 },
+    );
+  }
+
+  const burst = materialBurstLimiter.consume(userId);
+  if (!burst.allowed) {
+    return NextResponse.json(
+      {
+        error: "You're generating documents too quickly. Wait a moment and try again.",
+      },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(retryAfterSeconds(burst.retryAfterMs)),
+        },
+      },
+    );
+  }
+
+  const quota = await checkMaterialQuota(userId);
+  if (!quota.allowed) {
+    return NextResponse.json(
+      { error: quotaMessage("material", quota) },
+      { status: 429 },
     );
   }
 

@@ -13,6 +13,7 @@ import {
   sanitizeFileName,
 } from "@/lib/cv/validate";
 import { prisma } from "@/lib/db";
+import { checkCvUploadQuota, quotaMessage } from "@/lib/usage";
 
 const MAX_CVS_PER_USER = 25;
 
@@ -39,6 +40,11 @@ export async function ingestCv(
       400,
       `You've reached the ${MAX_CVS_PER_USER} CV limit. Delete an older CV first.`,
     );
+  }
+
+  const quota = await checkCvUploadQuota(userId);
+  if (!quota.allowed) {
+    throw new CvUploadError(429, quotaMessage("CV upload", quota));
   }
 
   const cv = await prisma.cv.create({
